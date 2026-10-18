@@ -251,3 +251,71 @@ def appliquer_correlation_emission(h: np.ndarray, rho: float) -> np.ndarray:
     m = h.shape[1]
     racine_r = racine_matricielle_symmetrique(matrice_correlation_exponentielle(m, rho))
     return h @ racine_r
+
+
+def rendre_utilisateurs_similaires(
+    h: np.ndarray,
+    beta: float,
+    utilisateur_a: int = 0,
+    utilisateur_b: int = 1,
+) -> np.ndarray:
+    """Rend deux canaux utilisateurs progressivement colinéaires.
+
+    Le canal de l'utilisateur ``b`` est remplacé par
+
+    ::
+
+        h_b <- sqrt(1 - beta²) * h_b + beta * h_a
+
+    ce qui conserve ``E[||h_b||²]`` mais rapproche ``h_b`` de ``h_a``
+    lorsque ``beta`` tend vers 1 : les deux utilisateurs deviennent
+    alors difficiles à séparer spatialement et le ZF doit inverser une
+    matrice ``H H^H`` quasi singulière (bruit de recodage).
+
+    Parameters
+    ----------
+    h : numpy.ndarray
+        Canal ``(k, m)`` dont deux lignes vont devenir similaires.
+    beta : float
+        Degré de similitude dans ``[0, 1[`` (``0`` : canaux
+        indépendants ; ``beta -> 1`` : canaux identiques).
+    utilisateur_a, utilisateur_b : int
+        Indices des deux utilisateurs concernés.
+
+    Returns
+    -------
+    numpy.ndarray
+        Nouveau canal ``(k, m)`` (l'entrée n'est pas modifiée).
+
+    Raises
+    ------
+    ValueError
+        Si ``beta`` n'est pas dans ``[0, 1[`` ou si les indices sont
+        invalides.
+    """
+    h = np.asarray(h)
+    if h.ndim != 2:
+        raise ValueError(f"Le canal doit être une matrice 2D (forme obtenue : {h.shape}).")
+    if not (0.0 <= beta < 1.0):
+        raise ValueError(
+            f"beta doit être dans [0, 1[ (beta={beta}) ; beta = 1 rendrait les "
+            "canaux identiques et le canal singulier."
+        )
+
+    k = h.shape[0]
+    if not (0 <= utilisateur_a < k and 0 <= utilisateur_b < k):
+        raise ValueError(
+            f"Indices d'utilisateurs invalides : ({utilisateur_a}, {utilisateur_b}) "
+            f"pour K = {k}."
+        )
+    if utilisateur_a == utilisateur_b:
+        raise ValueError("Les deux utilisateurs doivent être distincts.")
+
+    if beta == 0.0:
+        return h.copy()
+
+    h_copie = h.copy()
+    h_copie[utilisateur_b] = (
+        np.sqrt(1.0 - beta ** 2) * h[utilisateur_b] + beta * h[utilisateur_a]
+    )
+    return h_copie

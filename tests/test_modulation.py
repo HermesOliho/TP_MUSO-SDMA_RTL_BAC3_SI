@@ -8,9 +8,15 @@ from src.modulation import (
     ber_depuis_comptage,
     ber_global,
     bits_aleatoires,
+    bits_par_symbole,
     calculer_ber,
+    demoduler,
     demoduler_bpsk,
+    demoduler_bruteforce,
+    moduler,
     moduler_bpsk,
+    normaliser_nom_modulation,
+    table_constellation,
 )
 
 
@@ -103,3 +109,72 @@ def test_ber_global():
     assert global_.erreurs == 1
     assert global_.nb_bits == 100
     assert global_.ber == pytest.approx(0.01)
+
+
+# ------------------------------------------------------------
+# Modulations 4-QAM et 16-QAM
+# ------------------------------------------------------------
+
+@pytest.mark.parametrize("modulation", ["BPSK", "4-QAM", "16-QAM"])
+def test_constellation_puissance_moyenne_unitaire(modulation):
+    """Toutes les constellations sont normalisées à E[|s|^2] = 1."""
+    table = table_constellation(modulation)
+    b = bits_par_symbole(modulation)
+    assert table.size == 2 ** b
+    assert float(np.mean(np.abs(table) ** 2)) == pytest.approx(1.0, abs=1e-12)
+
+
+@pytest.mark.parametrize("modulation", ["BPSK", "4-QAM", "16-QAM"])
+def test_aller_retour_modulation_demodulation(modulation):
+    """Sans bruit, moduler puis démoduler restitue les bits d'origine."""
+    rng = np.random.default_rng(5)
+    b = bits_par_symbole(modulation)
+    bits = bits_aleatoires(4000, rng)[: (4000 // b) * b]
+    symboles = moduler(bits, modulation)
+    assert symboles.size == bits.size // b
+    np.testing.assert_array_equal(demoduler(symboles, modulation), bits)
+
+
+def test_demoduler_separable_equivaut_au_plus_proche_voisin():
+    """La décision séparable par axe égale l'argmin 2D sur tout point reçu."""
+    rng = np.random.default_rng(6)
+    for modulation in ("BPSK", "4-QAM", "16-QAM"):
+        recus = rng.normal(size=(3, 500)) + 1j * rng.normal(size=(3, 500))
+        np.testing.assert_array_equal(
+            demoduler(recus, modulation), demoduler_bruteforce(recus, modulation)
+        )
+
+
+@pytest.mark.parametrize("modulation", ["4-QAM", "16-QAM"])
+def test_constellations_codage_de_gray(modulation):
+    """Deux points voisins de la constellation ne diffèrent que d'un bit."""
+    table = table_constellation(modulation)
+    n = table.size
+    for indice in range(n):
+        distances = np.abs(table - table[indice])
+        distances[indice] = np.inf
+        voisin = int(np.argmin(distances))
+        assert bin(indice ^ voisin).count("1") == 1
+
+
+def test_alias_nom_modulation():
+    """Les alias usuels sont normalisés ; un nom inconnu lève ValueError."""
+    assert normaliser_nom_modulation("qpsk") == "4-QAM"
+    assert normaliser_nom_modulation("16qam") == "16-QAM"
+    assert normaliser_nom_modulation("bpsk") == "BPSK"
+    with pytest.raises(ValueError):
+        normaliser_nom_modulation("8-QAM")
+
+
+def test_moduler_taille_invalide():
+    """Un nombre de bits non multiple du débit symbole lève ValueError."""
+    with pytest.raises(ValueError):
+        moduler([0, 1, 0], "16-QAM")     # 3 bits non multiple de 4
+    with pytest.raises(ValueError):
+        moduler([0, 2], "BPSK")          # valeur non binaire
+
+
+def test_demoduler_sequence_vide():
+    """Une séquence vide ne doit pas lever d'erreur."""
+    assert demoduler(np.array([]), "16-QAM").size == 0
+    assert moduler(np.array([], dtype=np.uint8), "16-QAM").size == 0

@@ -12,9 +12,9 @@ import numpy as np
 import pytest
 
 from src.canal import generer_canal, sigma2_depuis_snr_db
-from src.detection import detecter_bpsk, evaluer_reception, transmettre
+from src.detection import detecter_bpsk, egaliser, evaluer_reception, gains_utiles, transmettre
 from src.images import convertir_en_bits, reconstruire_image
-from src.modulation import moduler_bpsk
+from src.modulation import bits_par_symbole, moduler_bpsk
 from src.precodage_zf import normaliser_puissance, precodage_zf
 from src.simulations import (
     ResultatPoint,
@@ -285,8 +285,10 @@ def test_mode_rapide_complet_et_rapide(tmp_path):
                 "heatmap_G.png", "constellations.png"):
         assert (dossier_figures / nom).is_file(), f"figure manquante : {nom}"
     # ...mais pas les courbes Monte-Carlo du mode complet.
-    for nom in ("ber_snr.png", "ber_antennes.png",
-                "ber_utilisateurs.png", "canaux_correles.png"):
+    for nom in ("ber_snr.png", "ber_snr_par_m.png", "ber_moyen_vs_m.png",
+                "ber_utilisateurs.png", "conditionnement_ber.png",
+                "canaux_correles.png", "canaux_similaires.png",
+                "images_reconstruites.png"):
         assert not (dossier_figures / nom).is_file(), (
             f"le mode rapide ne doit pas produire {nom}"
         )
@@ -319,3 +321,67 @@ def test_reconstruction_depuis_bits():
     bits_rec = detecter_bpsk(symboles)
     image_rec = reconstruire_image(bits_rec, 5, 6)
     assert np.array_equal(image, image_rec)
+
+
+# ------------------------------------------------------------
+# Égalisation ŝ_k = y_k / g_k
+# ------------------------------------------------------------
+
+def test_egaliser_compense_le_gain_utile():
+    """Après égalisation par g_k, le signal reçu redonne les symboles émis."""
+    rng = np.random.default_rng(11)
+    h = generer_canal(4, 8, rng)
+    w_norm, _ = normaliser_puissance(precodage_zf(h), 1.0)
+    s = rng.normal(size=(4, 50)) + 1j * rng.normal(size=(4, 50))
+
+    y = h @ w_norm @ s
+    y_egalise = egaliser(y, gains_utiles(h, w_norm))
+    np.testing.assert_allclose(y_egalise, s, atol=1e-10)
+
+
+def test_egaliser_gain_nul_leve_erreur():
+    """Un gain utile nul rend l'égalisation impossible."""
+    with pytest.raises(ValueError):
+        egaliser(np.ones((2, 3), dtype=complex), np.array([1.0, 0.0]))
+
+
+# ------------------------------------------------------------
+# Modulations 4-QAM et 16-QAM de bout en bout
+# ------------------------------------------------------------
+
+@pytest.mark.parametrize("modulation", ["BPSK", "4-QAM", "16-QAM"])
+def test_transmission_sans_bruit_qam(modulation):
+    """Canal + ZF sans bruit : reconstruction exacte pour les trois modulations."""
+    rng = np.random.default_rng(42)
+    images = _petites_images()
+    h = generer_canal(len(images), 8, rng)
+    w_norm, alpha = normaliser_puissance(precodage_zf(h), 1.0)
+
+    resultat = transmettre_images(images, h, w_norm, alpha, sigma2=0.0,
+                                  modulation=modulation)
+
+    assert resultat.reception.ber.erreurs == 0
+    assert all(resultat.identiques)
+    for image_source, image_rec in zip(images, resultat.images_reconstruites):
+        assert np.array_equal(image_source, image_rec)
+
+
+@pytest.mark.parametrize("modulation", ["BPSK", "4-QAM", "16-QAM"])
+def test_simuler_ber_point_qam_compte_bits(modulation):
+    """Le comptage de bits tient compte du débit symbole de la modulation."""
+    b = bits_par_symbole(modulation)
+    n_effectif = (1000 // b) * b
+    point = simuler_ber_point(
+        m=8, k=4, snr_db=10.0, n_bits=1000, n_realisations=3,
+        rng=np.random.default_rng(1), modulation=modulation,
+    )
+    assert point.nb_bits == n_effectif * 3 * 4
+
+
+def test_ber_16qam_decroit_avec_le_snr():
+    """Le BER 16-QAM décroît nettement lorsque le SNR augmente."""
+    bas = simuler_ber_point(m=8, k=4, snr_db=0.0, n_bits=5000, n_realisations=4,
+                            rng=np.random.default_rng(2), modulation="16-QAM")
+    haut = simuler_ber_point(m=8, k=4, snr_db=20.0, n_bits=5000, n_realisations=4,
+                             rng=np.random.default_rng(2), modulation="16-QAM")
+    assert haut.ber < bas.ber

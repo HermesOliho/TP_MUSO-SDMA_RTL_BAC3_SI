@@ -13,3 +13,9 @@ Thumbs.db
 # Éditeurs
 .vscode/*
 !.vscode/settings.json
+
+# Rapports générés par l'agent personnalisé
+rapport/
+
+# Agent personnalisé OpenCode (local, non versionné pour le moment)
+.opencode/agents/rapport-academique.agent.md
