@@ -1,0 +1,8 @@
+# Dépendances du TP MU-MISO / SDMA / précodage Zero-Forcing
+# Python 3.10 ou supérieur recommandé (développé et testé sous Python 3.13).
+numpy>=1.24
+matplotlib>=3.7
+Pillow>=10.0
+
+# Utilisé uniquement pour les tests unitaires (python -m pytest)
+pytest>=7.4

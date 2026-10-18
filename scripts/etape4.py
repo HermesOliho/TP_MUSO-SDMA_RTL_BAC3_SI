@@ -7,9 +7,16 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+# Importer Path pour construire un chemin de fichier fiable,
+# independant du repertoire courant.
+from pathlib import Path
+
 # ------------------------------------------------------------
 # 1. Parametres du systeme
 # ------------------------------------------------------------
+
+# Racine du projet : le dossier qui contient src/, data/, figures/...
+DOSSIER_PROJET = Path(__file__).resolve().parent.parent
 
 M = 8  # Nombre d'antennes d'emission
 K = 4  # Nombre d'utilisateurs
@@ -130,8 +137,12 @@ ax.set_title(
 plt.tight_layout()
 
 # Enregistrer la figure pour le rapport du TP.
+# Le chemin est calcule depuis la racine du projet, pas depuis le
+# repertoire courant.
+CHEMIN_FIGURE = DOSSIER_PROJET / "figures" / "heatmap_G_etape4.png"
+CHEMIN_FIGURE.parent.mkdir(parents=True, exist_ok=True)
 plt.savefig(
-    "heatmap_G.png",
+    CHEMIN_FIGURE,
     dpi=300,
     bbox_inches="tight"
 )
@@ -139,4 +150,4 @@ plt.savefig(
 # Afficher la heatmap.
 plt.show()
 
-print("\nHeatmap enregistrée dans heatmap_G.png")
+print(f"\nHeatmap enregistrée dans {CHEMIN_FIGURE}")
