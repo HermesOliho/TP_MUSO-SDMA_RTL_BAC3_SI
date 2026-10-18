@@ -243,7 +243,8 @@ for k in range(K):
 fig, axes = plt.subplots(
     nrows=K,
     ncols=2,
-    figsize=(10, 4 * K)
+    figsize=(10, 4 * K),
+    constrained_layout=True
 )
 
 # Parcourir les utilisateurs pour remplir la figure.
@@ -267,9 +268,6 @@ for k in range(K):
     # Retirer les axes pour mieux voir les images.
     axes[k, 0].axis("off")
     axes[k, 1].axis("off")
-
-# Ajuster les espacements entre les images.
-plt.tight_layout()
 
 # Afficher la figure.
 plt.show()
